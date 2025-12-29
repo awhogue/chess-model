@@ -15,17 +15,11 @@ pip install -r requirements.txt
 Process a PNG image:
 
 ```bash
-python process_image.py image.png
-```
-
-With verbose output:
-
-```bash
-python process_image.py image.png --verbose
+python process_image.py image.png gemini_API_key
 ```
 
 ## Requirements
 
 - Python 3.7+
 - Pillow (PIL) for image processing
-
+- google-genai for Gemini API
