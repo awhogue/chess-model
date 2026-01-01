@@ -220,8 +220,8 @@ def main():
                 "model_description": response_json.get('description', 'N/A')
             }
 
-            print(f"Model solution: {result['model_solution']}")
-            print(f"Description: {result['model_description']}...")
+            print(f"Model solution:    {result['model_solution']}")
+            print(f"Description:       {result['model_description']}...")
             if result['model_solution'] == result['expected_solution']:
                 result['correct'] = True
             else:
@@ -235,8 +235,6 @@ def main():
                 
         except Exception as e:
             print(f"Error processing puzzle {i}: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc()
             result = {
                 "puzzle_index": i,
                 "citation": citation,
@@ -255,10 +253,12 @@ def main():
         print("=" * 80)
         print("RESULTS SUMMARY")
         print("=" * 80)
-        num_correct = sum(1 for result in results if result['correct'])
-        num_incorrect = sum(1 for result in results if not result['correct'])
-        print(f"Number of correct solutions: {num_correct}")
-        print(f"Number of incorrect solutions: {num_incorrect}")
+        num_correct = sum(1 for result in results if 'correct' in result and result['correct'])
+        num_incorrect = sum(1 for result in results if 'correct' in result and not result['correct'])
+        num_errors = sum(1 for result in results if 'error' in result)
+        print(f"Correct solutions: {num_correct}")
+        print(f"Incorrect solutions: {num_incorrect}")
+        print(f"Errors: {num_errors}")
         print(f"Accuracy: {num_correct / len(results)}")
     
     return 0
