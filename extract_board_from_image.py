@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# Send an image to the Gemini 2.0 Flash API and extract the FEN notation of the chess board, 
+# along with the best move and other information.
+
 import argparse
 import sys
 from pathlib import Path
@@ -151,10 +154,11 @@ def main():
     cleaned_response = strip_markdown_json(response)
     json_response = json.loads(cleaned_response)
     fen = json_response['fen']
-    print(fen)
+    print(f"FEN: {fen}")
     board = chess.Board(fen)
     print(board)
-    print(json_response['best_move'])
+    print(f"Best move: {json_response['best_move']}")
+    print(f'Confidence: {json_response['best_move_confidence']}')
     print(json_response['best_move_description'])
    
     return 0
