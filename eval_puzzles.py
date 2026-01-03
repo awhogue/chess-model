@@ -188,7 +188,7 @@ def main():
         '--num-problems',
         type=int,
         default=1,
-        help='Number of problems to send (default: 1)'
+        help='Number of problems to send (default: 1, use -1 for all problems)'
     )
     parser.add_argument(
         '--output',
@@ -228,7 +228,10 @@ def main():
         return 1
     
     # Limit number of problems
-    num_problems = min(args.num_problems, len(puzzles))
+    if args.num_problems == -1:
+        num_problems = len(puzzles)
+    else:
+        num_problems = min(args.num_problems, len(puzzles))
     puzzles_to_process = puzzles[:num_problems]
     
     # Determine model display name
