@@ -3,3 +3,11 @@ google-genai>=0.2.0
 python-chess>=1.999
 requests>=2.31.0
 
+# Hugging Face dependencies for training
+transformers>=4.35.0
+datasets>=2.14.0
+peft>=0.6.0
+accelerate>=0.24.0
+torch>=2.0.0
+tensorboard>=2.14.0
+

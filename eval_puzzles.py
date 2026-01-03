@@ -10,12 +10,8 @@ from pathlib import Path
 import requests
 import re
 import time
-from pydantic import BaseModel
 
-class PuzzleResponse(BaseModel):
-    best_moves: str
-    description: str
-    confidence: str
+from util import PuzzleResponse, load_puzzle_data, create_puzzle_prompt
 
 def strip_markdown_json(text):
     """
@@ -53,31 +49,6 @@ def get_openrouter_api_key():
         raise ValueError("API key file (.openrouter_api_key) is empty")
     
     return api_key
-
-
-def create_puzzle_prompt(fen):
-    """
-    Create a prompt for analyzing a chess puzzle.
-    
-    Args:
-        fen (str): FEN notation of the position
-        
-    Returns:
-        str: The formatted prompt
-    """
-    prompt = f"""You are an expert chess player analyzing a chess position.
-
-POSITION (FEN): {fen}
-
-Your task is to find the best sequence of moves for this position. Analyze the position carefully and determine:
-1. The best sequence of moves (in standard algebraic notation, e.g., "1. e4 e5 2. Nf3")
-2. Why these moves are the best (tactical themes, strategic considerations, etc.)
-3. Your confidence level in this solution
-
-You must respond with ONLY valid JSON (absolutely no markdown formatting or other types of text):
-{PuzzleResponse.model_json_schema()}
-"""
-    return prompt
 
 
 def send_to_openrouter(model, prompt, api_key):
@@ -215,14 +186,11 @@ def main():
             return 1
     
     # Read puzzle file
-    puzzle_file = Path(args.puzzle_file)
-    if not puzzle_file.exists():
-        print(f"Error: Puzzle file not found: {puzzle_file}", file=sys.stderr)
-        return 1
-    
     try:
-        with open(puzzle_file, 'r') as f:
-            puzzles = json.load(f)
+        puzzles = load_puzzle_data(args.puzzle_file)
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON in puzzle file: {e}", file=sys.stderr)
         return 1
