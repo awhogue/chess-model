@@ -58,7 +58,7 @@ Your task is to find the best sequence of moves for this position. Analyze the p
 2. Why these moves are the best (tactical themes, strategic considerations, etc.)
 3. Your confidence level in this solution
 
-Stop you output after at most 10 moves. Output no more than 10 moves total. 
+Stop your output after at most 10 moves. Output no more than 10 moves total. 
 
 You must respond with ONLY valid JSON in the following format (absolutely no markdown formatting or other types of text):
 {PuzzleResponse.model_json_schema()}
