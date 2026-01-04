@@ -137,13 +137,13 @@ def main():
     parser = argparse.ArgumentParser(
         description='Send chess puzzles to OpenRouter API for analysis',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog='Example: python eval_puzzles.py data/wtharvey-mate-in-2.json meta-llama/Llama-3.1-8B-Instruct --num-problems 5\n'
-        '         python eval_puzzles.py data/wtharvey-mate-in-2.json llama3.1 --local --num-problems 5'
+        epilog='Example: python eval_puzzles.py data/wtharvey-sample.json meta-llama/Llama-3.1-8B-Instruct --num-problems 5\n'
+        '         python eval_puzzles.py data/wtharvey-sample.json llama3.1 --local --num-problems 5'
     )
     parser.add_argument(
         'puzzle_file',
         type=str,
-        help='Path to the JSON puzzle file (e.g., data/wtharvey-mate-in-2.json)'
+        help='Path to the JSON puzzle file (e.g., data/wtharvey-sample.json)'
     )
     parser.add_argument(
         'model',
