@@ -15,16 +15,23 @@ class PuzzleResponse(BaseModel):
     description: str
     confidence: str
 
+class ChessPuzzle(BaseModel):
+    """Single chess puzzle."""
+    fen: str
+    solution: str
+    description: str
+    citation: str
+    source: str
 
 def load_puzzle_data(puzzle_file: str) -> List[Dict]:
     """
     Load chess puzzle data from JSON file.
     
     Args:
-        puzzle_file: Path to JSON file containing puzzles
-        
+        puzzle_file: Path to JSON file containing puzzles in ChessPuzzle format.
+        num_puzzles: Number of puzzles to load. If -1, load all puzzles.
     Returns:
-        List of puzzle dictionaries
+        List of ChessPuzzle objects
         
     Raises:
         FileNotFoundError: If puzzle file doesn't exist
@@ -34,8 +41,8 @@ def load_puzzle_data(puzzle_file: str) -> List[Dict]:
         raise FileNotFoundError(f"Puzzle file not found: {puzzle_file}")
     
     with Path(puzzle_file).open('r') as f:
-        puzzles = json.load(f)
-    
+        puzzles = [ChessPuzzle.model_validate(puzzle) for puzzle in json.load(f)]
+
     return puzzles
 
 
