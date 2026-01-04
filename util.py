@@ -45,7 +45,7 @@ def create_puzzle_prompt(fen: str) -> str:
     
     Args:
         fen: FEN notation of the position
-        
+
     Returns:
         The formatted prompt string
     """
@@ -54,9 +54,11 @@ def create_puzzle_prompt(fen: str) -> str:
 POSITION (FEN): {fen}
 
 Your task is to find the best sequence of moves for this position. Analyze the position carefully and determine:
-1. The best sequence of moves (in standard algebraic notation, e.g., "1. e4 e5 2. Nf3")
+1. The best sequence of up to 10 moves (in standard algebraic notation, e.g., "1. e4 e5 2. Nf3")
 2. Why these moves are the best (tactical themes, strategic considerations, etc.)
 3. Your confidence level in this solution
+
+Stop you output after at most 10 moves. Output no more than 10 moves total. 
 
 You must respond with ONLY valid JSON in the following format (absolutely no markdown formatting or other types of text):
 {PuzzleResponse.model_json_schema()}

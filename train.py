@@ -75,20 +75,32 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, padding_side="left")
     tokenizer.pad_token = tokenizer.eos_token 
 
-    prompt_batch = [create_puzzle_prompt(puzzle['fen']) for puzzle in puzzles_to_process]
+    prompt_batch = [f"{create_puzzle_prompt(puzzle['fen'])}\nJSON Output:\n" for puzzle in puzzles_to_process]
     inputs = tokenizer(prompt_batch, return_tensors="pt", padding=True, truncation=True).to(model.device)
 
     start_time = time.perf_counter()
 
-    generated_ids = model.generate(**inputs, max_new_tokens=500)
+    generated_ids = model.generate(**inputs, 
+        max_new_tokens=500, repetition_penalty=1.5,  # Higher = more penalty for repeating
+        no_repeat_ngram_size=3,  # Don't repeat 3-grams
+        temperature=0.7,
+        top_p=0.9,
+        do_sample=True,
+        pad_token_id=tokenizer.eos_token_id)
     generated_text_batch = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+    elapsed_time = time.perf_counter() - start_time
     for puzzle, prompt, output in zip(puzzles_to_process, prompt_batch, generated_text_batch):
-        model_response = PuzzleResponse.model_validate(json.loads(output[len(prompt):]))
         print(f"Puzzle: {puzzle['description']}")
         print(f"Solution: {puzzle['solution']}")
-        print(f"Model:    {model_response.best_moves}")
+        output_truncated = output.replace(prompt, '')
+        try:
+            model_response = PuzzleResponse.model_validate(json.loads(output_truncated))
+            print(f"Model:    {model_response.best_moves}")
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON: {e}")
+            print(f"Output: {output_truncated[:40]}...{output_truncated[-40:]}")
+            continue
         
-    elapsed_time = time.perf_counter() - start_time
     print(f"Total generation time: {elapsed_time:.2f} seconds ({elapsed_time / num_problems:.2f} seconds per puzzle)")
 
     return 0
