@@ -3,6 +3,8 @@
 Scrape chess puzzles from wtharvey.com website.
 Supports both HTML pages and text files.
 
+Thanks to Claude for the initial version of this script!
+
 Usage:
     python scrape_wtharvey.py <url1> [url2 ...] [-o output.json]
 
