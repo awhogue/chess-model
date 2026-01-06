@@ -11,7 +11,8 @@ from trl import SFTTrainer
 from huggingface_hub import login
 from datasets import Dataset
 
-from util import full_puzzle_prompt, ChessPuzzle, load_puzzle_data
+from util import ChessPuzzle, load_puzzle_data
+from generate import generate
 
 
 def get_huggingface_api_key():
@@ -37,35 +38,6 @@ def get_huggingface_api_key():
         raise ValueError("API key file (.huggingface_api_key) is empty")
     
     return api_key
-
-def generate(model, tokenizer, puzzles):
-    """
-    Generate responses for a batch of puzzles.
-    
-    Args:
-        model: The language model to use for generation
-        tokenizer: The tokenizer for the model
-        puzzles: List of ChessPuzzle objects
-        
-    Returns:
-        tuple: (generated_text_batch, elapsed_time) where generated_text_batch is a list of generated text strings
-    """
-    prompt_batch = [f"{full_puzzle_prompt(puzzle.fen)}\nJSON Output:\n" for puzzle in puzzles]
-    inputs = tokenizer(prompt_batch, return_tensors="pt", padding=True, truncation=True).to(model.device)
-
-    start_time = time.perf_counter()
-
-    generated_ids = model.generate(**inputs, 
-        max_new_tokens=500, repetition_penalty=1.5,  # Higher = more penalty for repeating
-        no_repeat_ngram_size=3,  # Don't repeat 3-grams
-        temperature=0.7,
-        top_p=0.9,
-        do_sample=True,
-        pad_token_id=tokenizer.eos_token_id)
-    generated_text_batch = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-    elapsed_time = time.perf_counter() - start_time
-    
-    return generated_text_batch, elapsed_time
 
 def training_example(puzzle: ChessPuzzle, tokenizer: AutoTokenizer) -> str:
     """
@@ -105,7 +77,7 @@ def main():
         '--output-model-dir',
         type=str,
         default=f"models/trained/",
-        help='Output directory for the fine-tuned model (default: models/<model_name>)'
+        help='Output directory for the fine-tuned model (default: models/trained/)'
     )
     args = parser.parse_args()
 

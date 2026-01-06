@@ -210,4 +210,4 @@ __marimo__/
 .*.py
 
 wtharvey-all.json
-models/trained/*
+models/*
