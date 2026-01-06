@@ -8,7 +8,6 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import List, Tuple
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -143,9 +142,9 @@ def main():
 
     # Process and display results
     results = []
-    prompt_batch = [f"{full_puzzle_prompt(puzzle.fen)}\nJSON Output:\n" for puzzle in puzzles_to_process]
+    all_prompts = [generate_prompt(puzzle) for puzzle in puzzles_to_process]
 
-    for puzzle, prompt, output in zip(puzzles_to_process, prompt_batch, all_generated_texts):
+    for puzzle, prompt, output in zip(puzzles_to_process, all_prompts, all_generated_texts):
         output_truncated = output.replace(prompt, '').strip()
         
         print(f"\nPuzzle: {puzzle.description}")
@@ -154,9 +153,8 @@ def main():
         
         try:
             model_response = PuzzleResponse.model_validate(json.loads(output_truncated))
-            print(f"Model solution: {model_response.best_moves}")
-            print(f"Confidence: {model_response.confidence}")
-            correct = model_response.best_moves == puzzle.solution
+            print(f"Model solution: {model_response.solution}")
+            correct = model_response.solution == puzzle.solution
             print(f"Correct: {correct}")
             
             result = {
@@ -164,14 +162,12 @@ def main():
                 "description": puzzle.description,
                 "citation": puzzle.citation,
                 "expected_solution": puzzle.solution,
-                "model_solution": model_response.best_moves,
-                "model_confidence": model_response.confidence,
-                "model_description": model_response.description,
+                "model_solution": model_response.solution,
                 "correct": correct
             }
-        except (json.JSONDecodeError, ValueError) as e:
+        except (json.JSONDecodeError, ValueError, AttributeError) as e:
             print(f"Error: Invalid JSON response: {e}")
-            print(f"Output: {output_truncated}...")
+            print(f"Output: {output_truncated}")
             result = {
                 "fen": puzzle.fen,
                 "description": puzzle.description,

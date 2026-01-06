@@ -11,9 +11,9 @@ from pydantic import BaseModel
 
 class PuzzleResponse(BaseModel):
     """Response model for puzzle analysis."""
-    best_moves: str
-    description: str
-    confidence: str
+    solution: str
+    # description: str
+    # confidence: str
 
 class ChessPuzzle(BaseModel):
     """Single chess puzzle."""
