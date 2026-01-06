@@ -14,6 +14,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 
 from util import full_puzzle_prompt, ChessPuzzle, load_puzzle_data, PuzzleResponse
+from config import MODEL_CONFIGS
 
 def generate_prompt(puzzle: ChessPuzzle) -> str:
     return f"""Analyze the following chess position and output the best sequence of moves: {puzzle.fen}
@@ -23,7 +24,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='Generate responses for chess puzzles using a language model',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog='Example: python generate.py --puzzle_file data/wtharvey-sample.json --model-name meta-llama/Llama-3.2-3B --num-problems 10'
+        epilog='Example: python generate.py --puzzle_file data/wtharvey-sample.json --model-config llama --num-problems 10'
     )
     parser.add_argument(
         '--puzzle_file',
@@ -32,16 +33,16 @@ def main():
         help='Path to JSON puzzle file (e.g., data/wtharvey-sample.json)'
     )
     parser.add_argument(
-        '--base-model-name',
+        '--model-config',
         type=str,
-        default='meta-llama/Llama-3.2-3B',
-        help='Hugging Face base model name or path (default: meta-llama/Llama-3.2-3B)'
+        default='llama',
+        help='Model configuration (default: llama). Options: llama, qwen'
     )
     parser.add_argument(
         '--trained-model-name',
         type=str,
         default=None,
-        help='Trained model name or path (default: <base-model-name>-lora)'
+        help='Trained model name or path (e.g., models/Llama-3.2-3B-10000-lora-64)'
     )
     parser.add_argument(
         '--num-problems',
@@ -70,22 +71,35 @@ def main():
         print(f"Emptying MPS cache")
         torch.mps.empty_cache()
     
+    # Get model configuration
+    if args.model_config not in MODEL_CONFIGS:
+        print(f"Error: Unknown model config '{args.model_config}'. Available: {list(MODEL_CONFIGS.keys())}", file=sys.stderr)
+        return 1
+    model_config = MODEL_CONFIGS[args.model_config]
+    base_model_name = model_config["name"]
+    
     # Load model and tokenizer
-    print(f"Loading tokenizer: {args.base_model_name}")
-    tokenizer = AutoTokenizer.from_pretrained(args.base_model_name, padding_side="left")
+    print(f"Loading tokenizer: {base_model_name}")
+    tokenizer = AutoTokenizer.from_pretrained(
+        base_model_name,
+        padding_side="left",
+        trust_remote_code=model_config["trust_remote_code"]
+    )
     tokenizer.pad_token = tokenizer.eos_token
-    print(f"Loading base model: {args.base_model_name}")
+    print(f"Loading base model: {base_model_name}")
     model = AutoModelForCausalLM.from_pretrained(
-        args.base_model_name,
+        base_model_name,
         dtype=torch.float16,
         device_map="auto",
         low_cpu_mem_usage=True,
+        trust_remote_code=model_config["trust_remote_code"],
     )
     if args.trained_model_name:
         print(f"Loading LoRA adapters: {args.trained_model_name}")
         model = PeftModel.from_pretrained(
             model,
             args.trained_model_name,
+            trust_remote_code=model_config["trust_remote_code"],
         )
     else:
         print(f"No LoRA adapters found, using base model")
@@ -163,6 +177,7 @@ def main():
                 "citation": puzzle.citation,
                 "expected_solution": puzzle.solution,
                 "model_solution": model_response.solution,
+                "model_description": model_response.description,
                 "correct": correct
             }
         except (json.JSONDecodeError, ValueError, AttributeError) as e:

@@ -16,6 +16,7 @@ import wandb
 import logging
 
 from util import ChessPuzzle, load_puzzle_data
+from config import MODEL_CONFIGS
 
 def get_huggingface_api_key():
     """
@@ -107,10 +108,10 @@ def main():
         help='Path to JSON puzzle file (e.g., data/wtharvey-sample.json)'
     )
     parser.add_argument(
-        '--model-name',
+        '--model-config',
         type=str,
-        default='meta-llama/Llama-3.2-3B',
-        help='Hugging Face model name or path (default: meta-llama/Llama-3.2-3B)'
+        default='llama',
+        help='Model configuration (default: llama)'
     )
     parser.add_argument(
         '--num-samples',
@@ -121,21 +122,36 @@ def main():
     parser.add_argument(
         '--output-model-dir',
         type=str,
-        help='Output directory for the fine-tuned model (default: models/<model_name>-lora)'
+        help='Output directory for the fine-tuned model (default: models/<model_name>-<num_samples>-lora-<lora_r>)'
     )
     parser.add_argument(
         '--use-wandb',
         action='store_true',
         help='Enable Weights & Biases logging for experiment tracking'
     )
+    parser.add_argument(
+        '--lora-r',
+        type=int,
+        default=32,
+        help='LoRA rank (r) parameter (default: 32). lora_alpha will be set to 2 * lora_r.'
+    )
     args = parser.parse_args()
 
     device = "mps" if torch.backends.mps.is_available() else "cpu"
     print(f"Using device: {device}")
+
+    model_config = MODEL_CONFIGS[args.model_config]
+    print(f"Loading model: {model_config['name']}")
     
     login(get_huggingface_api_key())
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, device_map=device)
-    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_config["name"], 
+        device_map=device, 
+        low_cpu_mem_usage=True, 
+        trust_remote_code=model_config["trust_remote_code"]
+    )
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
 
     all_puzzles = load_puzzle_data(args.puzzle_file)
     if args.num_samples == -1:
@@ -146,11 +162,17 @@ def main():
     puzzle_examples = [ training_example(puzzle, tokenizer) for puzzle in puzzles ]
     puzzles_dataset = Dataset.from_list(puzzle_examples).train_test_split(test_size=0.1)
 
-    model = AutoModelForCausalLM.from_pretrained(args.model_name, dtype=torch.float16, device_map=device)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_config["name"], 
+        dtype=torch.float16, 
+        device_map=device,
+        low_cpu_mem_usage=True,
+        trust_remote_code=model_config["trust_remote_code"],
+    )
     lora_config = LoraConfig(
-        r=32,
-        lora_alpha=32,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+        r=args.lora_r,
+        lora_alpha=2 * args.lora_r,  # Typically set to 2x the rank
+        target_modules=model_config["lora_targets"],
         lora_dropout=0.05,
         bias="none",
         task_type="CAUSAL_LM",
@@ -162,8 +184,9 @@ def main():
         wandb.init(
             project="chess-puzzle-solver",
             config={
-                "model": args.model_name,
-                "lora_r": 32,
+                "model": model_config["name"],
+                "lora_r": args.lora_r,
+                "lora_alpha": 2 * args.lora_r,
                 "learning_rate": 2e-4,
                 "batch_size": 8,
             }
@@ -172,7 +195,7 @@ def main():
     training_args = TrainingArguments(
         output_dir=args.output_model_dir,
         per_device_train_batch_size=2, # Can set to 2 or 4 to increase speed at the expense of memory
-        gradient_accumulation_steps=8, # Accumulate 8 steps before updating
+        gradient_accumulation_steps=4, # Accumulate 4 steps before updating
         gradient_checkpointing=False, # Set True to trade off memory for speed
         fp16=True,
         num_train_epochs=3,
@@ -205,7 +228,7 @@ def main():
 
     trainer.train()
     if not args.output_model_dir:
-        output_model_dir = f"models/{args.model_name}-lora"
+        output_model_dir = f"models/{model_config['name']}-{args.num_samples}-lora-{args.lora_r}"
     else:
         output_model_dir = args.output_model_dir
     trainer.save_model(output_model_dir)
