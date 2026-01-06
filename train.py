@@ -183,12 +183,15 @@ def main():
     if args.use_wandb:
         wandb.init(
             project="chess-puzzle-solver",
+            name=f"{model_config['name']}-{args.num_samples}-lora-{args.lora_r}",
             config={
                 "model": model_config["name"],
                 "lora_r": args.lora_r,
                 "lora_alpha": 2 * args.lora_r,
                 "learning_rate": 2e-4,
                 "batch_size": 8,
+                "dataset_size": args.num_samples,
+                "epochs": 3,
             }
         )
 
