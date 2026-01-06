@@ -4,16 +4,16 @@ import torch
 import argparse
 import time
 import sys
+import random
 from pathlib import Path
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, TrainerCallback
 from peft import LoraConfig, get_peft_model
 from trl import SFTTrainer
 from huggingface_hub import login
 from datasets import Dataset
+import wandb
 
 from util import ChessPuzzle, load_puzzle_data
-from generate import generate
-
 
 def get_huggingface_api_key():
     """
@@ -48,6 +48,44 @@ JSON Output:
 {{ "solution": "{puzzle.solution}" }}{tokenizer.eos_token}"""
     return {"text": prompt}
 
+class CustomTrainerCallback(TrainerCallback):
+    def __init__(self):
+        self.start_time = None
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        self.start_time = time.time()
+        print("\n" + "="*70)
+        print("🎯 Training Begin")
+        print(f"   Dataset: {len(kwargs.get('train_dataloader', []))} batches")
+        print(f"   Total Steps: {state.max_steps}")
+        print("="*70 + "\n")
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if logs and 'loss' in logs:
+            elapsed = time.time() - self.start_time
+            progress = state.global_step / state.max_steps
+            eta = (elapsed / progress) * (1 - progress) if progress > 0 else 0
+            
+            print(
+                f"[{progress*100:>5.1f}%] "
+                f"Step {state.global_step:>4}/{state.max_steps} | "
+                f"Loss {logs['loss']:.4f} | "
+                f"Accuracy {logs.get('mean_token_accuracy', 0)*100:>5.1f}% | "
+                f"LR {logs['learning_rate']:.2e} | "
+                f"ETA {int(eta//3600)}h {int((eta%3600)//60)}m | "
+                f"Speed {logs.get('train_speed', 0):>8.1f} tokens/sec"
+            )
+    
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        if metrics:
+            print(f"\n📊 Evaluation @ Step {state.global_step}:")
+            print(f"   Eval Loss: {metrics.get('eval_loss', 0):.4f}")
+
+    def on_train_end(self, args, state, control, **kwargs):
+        total = time.time() - self.start_time
+        print("\n" + "="*70)
+        print(f"✅ Training Complete! Time: {int(total//60)}m {int(total%60)}s")
+        print("="*70 + "\n")
 
 def main():
     parser = argparse.ArgumentParser(
@@ -68,7 +106,7 @@ def main():
         help='Hugging Face model name or path (default: meta-llama/Llama-3.2-3B)'
     )
     parser.add_argument(
-        '--num-problems',
+        '--num-samples',
         type=int,
         default=100,
         help='Number of problems to use (default: 100). This will be split into a training and test set.'
@@ -76,8 +114,7 @@ def main():
     parser.add_argument(
         '--output-model-dir',
         type=str,
-        default=f"models/trained/",
-        help='Output directory for the fine-tuned model (default: models/trained/)'
+        help='Output directory for the fine-tuned model (default: models/<model_name>-lora)'
     )
     args = parser.parse_args()
 
@@ -88,16 +125,21 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, device_map=device)
     tokenizer.pad_token = tokenizer.eos_token
 
-    puzzles = load_puzzle_data(args.puzzle_file)[:args.num_problems]
+    all_puzzles = load_puzzle_data(args.puzzle_file)
+    if args.num_samples == -1:
+        puzzles = all_puzzles
+    else:
+        num_samples = min(args.num_samples, len(all_puzzles))
+        puzzles = random.sample(all_puzzles, num_samples)
     puzzle_examples = [ training_example(puzzle, tokenizer) for puzzle in puzzles ]
     puzzles_dataset = Dataset.from_list(puzzle_examples).train_test_split(test_size=0.1)
     print(puzzles_dataset)
 
     model = AutoModelForCausalLM.from_pretrained(args.model_name, dtype=torch.float16, device_map=device)
     lora_config = LoraConfig(
-        r=8,
-        lora_alpha=16,
-        target_modules=["q_proj", "v_proj"],
+        r=16,
+        lora_alpha=32,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
         lora_dropout=0.05,
         bias="none",
         task_type="CAUSAL_LM",
@@ -105,15 +147,38 @@ def main():
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
     
+    wandb.init(
+        project="chess-puzzle-solver",
+        config={
+            "model": args.model_name,
+            "lora_r": 16,
+            "learning_rate": 2e-4,
+            "batch_size": 8,
+        }
+    )
+
     training_args = TrainingArguments(
         output_dir=args.output_model_dir,
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=8,
-        num_train_epochs=1,
-        learning_rate=2e-4,
+        per_device_train_batch_size=1, # Can set to 2 or 4 to increase speed at the expense of memory
+        gradient_accumulation_steps=8, # Accumulate 8 steps before updating
+        gradient_checkpointing=False, # Set True to trade off memory for speed
         fp16=True,
-        logging_steps=5,
-        save_steps=50,
+        num_train_epochs=3,
+        learning_rate=2e-4,
+        warmup_steps=100, # ~3% of training steps
+        lr_scheduler_type="cosine",
+        optim="adamw_torch",
+        max_grad_norm=1.0,
+        save_strategy="steps",
+        save_steps=500,
+        save_total_limit=3,
+        logging_steps=50,
+        report_to="wandb",  # Disable all default reporting
+        eval_strategy="steps",
+        eval_steps=500,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        dataloader_pin_memory=False if device == "mps" else True,  # MPS doesn't support pin_memory
     )
 
     trainer = SFTTrainer(
@@ -122,9 +187,15 @@ def main():
         eval_dataset=puzzles_dataset["test"],
         args=training_args,
         processing_class=tokenizer,
+        callbacks=[CustomTrainerCallback()],
     )
     trainer.train()
-    trainer.save_model(args.output_model_dir)
+    if not args.output_model_dir:
+        output_model_dir = f"models/{args.model_name}-lora"
+    else:
+        output_model_dir = args.output_model_dir
+    trainer.save_model(output_model_dir)
+    print(f"Model saved to: {output_model_dir}")
     return 0
 
 if __name__ == "__main__":

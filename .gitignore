@@ -211,3 +211,5 @@ __marimo__/
 
 wtharvey-all.json
 models/*
+trainer_output
+wandb/*
