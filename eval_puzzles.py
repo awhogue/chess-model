@@ -11,7 +11,7 @@ import requests
 import re
 import time
 
-from util import PuzzleResponse, load_puzzle_data, create_puzzle_prompt
+from util import PuzzleResponse, load_puzzle_data, full_puzzle_prompt
 
 def strip_markdown_json(text):
     """
@@ -224,7 +224,7 @@ def main():
         print(f"Expected solution: {solution}")
         
         try:
-            prompt = create_puzzle_prompt(fen)
+            prompt = full_puzzle_prompt(fen)
             start_time = time.perf_counter()
             if args.local:
                 response_text = send_to_local_model(args.model, prompt)
