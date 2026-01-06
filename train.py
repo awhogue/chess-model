@@ -6,12 +6,14 @@ import time
 import sys
 import random
 from pathlib import Path
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, TrainerCallback
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, TrainerCallback, testing_utils
+from transformers.trainer_callback import PrinterCallback
 from peft import LoraConfig, get_peft_model
 from trl import SFTTrainer
 from huggingface_hub import login
 from datasets import Dataset
 import wandb
+import logging
 
 from util import ChessPuzzle, load_puzzle_data
 
@@ -65,27 +67,32 @@ class CustomTrainerCallback(TrainerCallback):
             elapsed = time.time() - self.start_time
             progress = state.global_step / state.max_steps
             eta = (elapsed / progress) * (1 - progress) if progress > 0 else 0
-            
+            steps = state.global_step
+            tokens_per_step = args.per_device_train_batch_size * args.gradient_accumulation_steps * 512  # avg seq length
+            total_tokens = steps * tokens_per_step
+            tok_per_sec = total_tokens / elapsed
+
             print(
                 f"[{progress*100:>5.1f}%] "
                 f"Step {state.global_step:>4}/{state.max_steps} | "
                 f"Loss {logs['loss']:.4f} | "
                 f"Accuracy {logs.get('mean_token_accuracy', 0)*100:>5.1f}% | "
                 f"LR {logs['learning_rate']:.2e} | "
-                f"ETA {int(eta//3600)}h {int((eta%3600)//60)}m | "
-                f"Speed {logs.get('train_speed', 0):>8.1f} tokens/sec"
+                f"ETA {int(eta//3600):>1}h {int((eta%3600)//60):>2}m | "
+                f"Speed {tok_per_sec:>8.1f} tokens/sec"
             )
     
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
         if metrics:
-            print(f"\n📊 Evaluation @ Step {state.global_step}:")
-            print(f"   Eval Loss: {metrics.get('eval_loss', 0):.4f}")
+            print(f"  📊 Evaluation @ Step {state.global_step} | Eval Loss: {metrics.get('eval_loss', 0):.4f} | Accuracy: {metrics.get('mean_token_accuracy', 0)*100:>5.1f}%")
 
     def on_train_end(self, args, state, control, **kwargs):
         total = time.time() - self.start_time
         print("\n" + "="*70)
         print(f"✅ Training Complete! Time: {int(total//60)}m {int(total%60)}s")
         print("="*70 + "\n")
+
+logging.getLogger("transformers.training_args").setLevel(logging.ERROR)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -116,6 +123,11 @@ def main():
         type=str,
         help='Output directory for the fine-tuned model (default: models/<model_name>-lora)'
     )
+    parser.add_argument(
+        '--use-wandb',
+        action='store_true',
+        help='Enable Weights & Biases logging for experiment tracking'
+    )
     args = parser.parse_args()
 
     device = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -133,11 +145,10 @@ def main():
         puzzles = random.sample(all_puzzles, num_samples)
     puzzle_examples = [ training_example(puzzle, tokenizer) for puzzle in puzzles ]
     puzzles_dataset = Dataset.from_list(puzzle_examples).train_test_split(test_size=0.1)
-    print(puzzles_dataset)
 
     model = AutoModelForCausalLM.from_pretrained(args.model_name, dtype=torch.float16, device_map=device)
     lora_config = LoraConfig(
-        r=16,
+        r=32,
         lora_alpha=32,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
         lora_dropout=0.05,
@@ -147,19 +158,20 @@ def main():
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
     
-    wandb.init(
-        project="chess-puzzle-solver",
-        config={
-            "model": args.model_name,
-            "lora_r": 16,
-            "learning_rate": 2e-4,
-            "batch_size": 8,
-        }
-    )
+    if args.use_wandb:
+        wandb.init(
+            project="chess-puzzle-solver",
+            config={
+                "model": args.model_name,
+                "lora_r": 32,
+                "learning_rate": 2e-4,
+                "batch_size": 8,
+            }
+        )
 
     training_args = TrainingArguments(
         output_dir=args.output_model_dir,
-        per_device_train_batch_size=1, # Can set to 2 or 4 to increase speed at the expense of memory
+        per_device_train_batch_size=2, # Can set to 2 or 4 to increase speed at the expense of memory
         gradient_accumulation_steps=8, # Accumulate 8 steps before updating
         gradient_checkpointing=False, # Set True to trade off memory for speed
         fp16=True,
@@ -172,8 +184,8 @@ def main():
         save_strategy="steps",
         save_steps=500,
         save_total_limit=3,
-        logging_steps=50,
-        report_to="wandb",  # Disable all default reporting
+        logging_steps=10,
+        report_to="wandb" if args.use_wandb else "none",  # Use wandb if enabled, otherwise disable reporting
         eval_strategy="steps",
         eval_steps=500,
         load_best_model_at_end=True,
@@ -189,6 +201,8 @@ def main():
         processing_class=tokenizer,
         callbacks=[CustomTrainerCallback()],
     )
+    trainer.remove_callback(PrinterCallback)
+
     trainer.train()
     if not args.output_model_dir:
         output_model_dir = f"models/{args.model_name}-lora"
