@@ -177,7 +177,6 @@ def main():
                 "citation": puzzle.citation,
                 "expected_solution": puzzle.solution,
                 "model_solution": model_response.solution,
-                "model_description": model_response.description,
                 "correct": correct
             }
         except (json.JSONDecodeError, ValueError, AttributeError) as e:
