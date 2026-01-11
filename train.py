@@ -92,7 +92,12 @@ class CustomTrainerCallback(TrainerCallback):
     
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
         if metrics:
-            print(f"  📊 Evaluation @ Step {state.global_step} | Eval Loss: {metrics.get('eval_loss', 0):.4f} | Accuracy: {metrics.get('eval_accuracy', 0)*100:>5.1f}%")
+            print(metrics.keys())
+            print(
+                f"  📊 Evaluation @ Step {state.global_step} | "
+                f"Eval Loss: {metrics.get('eval_loss', 0):.4f} | "
+                f"Accuracy: {metrics.get('eval_accuracy', 0)*100:>5.1f}%"
+            )
 
     def on_train_end(self, args, state, control, **kwargs):
         total = time.time() - self.start_time
