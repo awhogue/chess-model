@@ -200,13 +200,23 @@ def main():
     # Use "auto" device_map on CUDA for multi-GPU support, specific device otherwise
     model_device_map = "auto" if device == "cuda" else device
 
+    # Use Flash Attention 2 if available on CUDA (faster training)
+    attn_impl = None
+    if device == "cuda":
+        try:
+            import flash_attn
+            attn_impl = "flash_attention_2"
+            print("Using Flash Attention 2")
+        except ImportError:
+            print("Flash Attention 2 not available, using default attention")
+
     model = AutoModelForCausalLM.from_pretrained(
         model_config["name"],
         torch_dtype=model_dtype,
         device_map=model_device_map,
         low_cpu_mem_usage=True,
         trust_remote_code=model_config["trust_remote_code"],
-        attn_implementation="flash_attention_2" if device == "cuda" else None,
+        attn_implementation=attn_impl,
     )
     lora_config = LoraConfig(
         r=args.lora_r,
