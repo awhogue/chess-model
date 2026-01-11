@@ -5,6 +5,7 @@ import argparse
 import time
 import sys
 import random
+import os
 from pathlib import Path
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, TrainerCallback, testing_utils
 from transformers.trainer_callback import PrinterCallback
@@ -20,26 +21,32 @@ from config import MODEL_CONFIGS
 
 def get_huggingface_api_key():
     """
-    Read Hugging Face API key from .huggingface_api_key file.
-    
+    Read Hugging Face API key from environment variable or .huggingface_api_key file.
+
     Returns:
         str: The API key
-        
+
     Raises:
-        FileNotFoundError: If .huggingface_api_key file doesn't exist
-        ValueError: If the API key file is empty
+        FileNotFoundError: If no API key found in environment or file
+        ValueError: If the API key is empty
     """
+    # Check environment variables first (preferred for remote deployments)
+    api_key = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_API_KEY")
+    if api_key:
+        return api_key.strip()
+
+    # Fall back to file-based approach for local development
     api_key_file = Path('.huggingface_api_key')
     if not api_key_file.exists():
         raise FileNotFoundError(
-            ".huggingface_api_key file not found. "
-            "Please create a .huggingface_api_key file with your API key."
+            "No Hugging Face API key found. Either set HF_TOKEN environment variable "
+            "or create a .huggingface_api_key file with your API key."
         )
-    
+
     api_key = api_key_file.read_text().strip()
     if not api_key:
         raise ValueError("API key file (.huggingface_api_key) is empty")
-    
+
     return api_key
 
 def training_example(puzzle: ChessPuzzle, tokenizer: AutoTokenizer) -> str:
@@ -137,8 +144,17 @@ def main():
     )
     args = parser.parse_args()
 
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
-    print(f"Using device: {device}")
+    if torch.cuda.is_available():
+        device = "cuda"
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_count = torch.cuda.device_count()
+        print(f"Using device: {device} ({gpu_count}x {gpu_name})")
+    elif torch.backends.mps.is_available():
+        device = "mps"
+        print(f"Using device: {device}")
+    else:
+        device = "cpu"
+        print(f"Using device: {device}")
 
     model_config = MODEL_CONFIGS[args.model_config]
     print(f"Loading model: {model_config['name']}")
@@ -162,12 +178,18 @@ def main():
     puzzle_examples = [ training_example(puzzle, tokenizer) for puzzle in puzzles ]
     puzzles_dataset = Dataset.from_list(puzzle_examples).train_test_split(test_size=0.1)
 
+    # Use bfloat16 on CUDA (better for Ampere+ GPUs), float16 on MPS
+    model_dtype = torch.bfloat16 if device == "cuda" else torch.float16
+    # Use "auto" device_map on CUDA for multi-GPU support, specific device otherwise
+    model_device_map = "auto" if device == "cuda" else device
+
     model = AutoModelForCausalLM.from_pretrained(
-        model_config["name"], 
-        dtype=torch.float16, 
-        device_map=device,
+        model_config["name"],
+        torch_dtype=model_dtype,
+        device_map=model_device_map,
         low_cpu_mem_usage=True,
         trust_remote_code=model_config["trust_remote_code"],
+        attn_implementation="flash_attention_2" if device == "cuda" else None,
     )
     lora_config = LoraConfig(
         r=args.lora_r,
@@ -195,15 +217,19 @@ def main():
             }
         )
 
+    # Use larger batch size on CUDA (more VRAM available)
+    batch_size = 8 if device == "cuda" else 2
+
     training_args = TrainingArguments(
         output_dir=args.output_model_dir,
-        per_device_train_batch_size=2, # Can set to 2 or 4 to increase speed at the expense of memory
-        gradient_accumulation_steps=4, # Accumulate 4 steps before updating
-        gradient_checkpointing=False, # Set True to trade off memory for speed
-        fp16=True,
+        per_device_train_batch_size=batch_size,
+        gradient_accumulation_steps=4,  # Accumulate 4 steps before updating
+        gradient_checkpointing=False,  # Set True to trade off memory for speed
+        bf16=(device == "cuda"),  # Use bfloat16 on CUDA
+        fp16=(device == "mps"),   # Use float16 on MPS
         num_train_epochs=3,
         learning_rate=2e-4,
-        warmup_steps=100, # ~3% of training steps
+        warmup_steps=100,  # ~3% of training steps
         lr_scheduler_type="cosine",
         optim="adamw_torch",
         max_grad_norm=1.0,
@@ -211,12 +237,12 @@ def main():
         save_steps=500,
         save_total_limit=3,
         logging_steps=10,
-        report_to="wandb" if args.use_wandb else "none",  # Use wandb if enabled, otherwise disable reporting
+        report_to="wandb" if args.use_wandb else "none",
         eval_strategy="steps",
         eval_steps=500,
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
-        dataloader_pin_memory=False if device == "mps" else True,  # MPS doesn't support pin_memory
+        dataloader_pin_memory=(device != "mps"),  # MPS doesn't support pin_memory
     )
 
     trainer = SFTTrainer(
