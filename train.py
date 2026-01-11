@@ -7,7 +7,7 @@ import sys
 import random
 import os
 from pathlib import Path
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, TrainerCallback, testing_utils
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, TrainerCallback
 from transformers.trainer_callback import PrinterCallback
 from peft import LoraConfig, get_peft_model
 from trl import SFTTrainer
