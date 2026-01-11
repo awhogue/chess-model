@@ -181,7 +181,6 @@ def main():
         model_config["name"], 
         device_map=device, 
         low_cpu_mem_usage=True, 
-        trust_remote_code=model_config["trust_remote_code"]
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -215,7 +214,6 @@ def main():
         torch_dtype=model_dtype,
         device_map=model_device_map,
         low_cpu_mem_usage=True,
-        trust_remote_code=model_config["trust_remote_code"],
         attn_implementation=attn_impl,
     )
     lora_config = LoraConfig(

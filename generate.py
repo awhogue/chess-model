@@ -83,7 +83,6 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(
         base_model_name,
         padding_side="left",
-        trust_remote_code=model_config["trust_remote_code"]
     )
     tokenizer.pad_token = tokenizer.eos_token
     print(f"Loading base model: {base_model_name}")
@@ -92,14 +91,12 @@ def main():
         dtype=torch.float16,
         device_map="auto",
         low_cpu_mem_usage=True,
-        trust_remote_code=model_config["trust_remote_code"],
     )
-    if args.trained_model_name:
-        print(f"Loading LoRA adapters: {args.trained_model_name}")
+    if args.trained_model_dir:
+        print(f"Loading LoRA adapters: {args.trained_model_dir}")
         model = PeftModel.from_pretrained(
             model,
-            args.trained_model_name,
-            trust_remote_code=model_config["trust_remote_code"],
+            args.trained_model_dir,
         )
     else:
         print(f"No LoRA adapters found, using base model")
