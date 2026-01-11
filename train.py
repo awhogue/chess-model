@@ -252,14 +252,14 @@ def main():
         output_dir=args.output_model_dir,
         per_device_train_batch_size=batch_size,
         gradient_accumulation_steps=args.grad_steps,
-        gradient_checkpointing=False,  # Set True to trade off memory for speed
+        gradient_checkpointing=(device == "cuda"),
         bf16=(device == "cuda"),  # Use bfloat16 on CUDA
         fp16=(device == "mps"),   # Use float16 on MPS
         num_train_epochs=args.epochs,
         learning_rate=2e-4,
         warmup_steps=100,  # ~3% of training steps
         lr_scheduler_type="cosine",
-        optim="adamw_torch",
+        optim="adamw_torch_fused" if device == "cuda" else "adamw_torch",
         max_grad_norm=1.0,
         save_strategy="steps",
         save_steps=500,
@@ -271,6 +271,7 @@ def main():
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         dataloader_pin_memory=(device != "mps"),  # MPS doesn't support pin_memory
+        dataloader_num_workers=4 if device == "cuda" else 0,
     )
 
     trainer = SFTTrainer(
@@ -285,7 +286,7 @@ def main():
 
     trainer.train()
     if not args.output_model_dir:
-        output_model_dir = f"models/{model_config['name']}-{args.num_samples}-lora-{args.lora_r}"
+        output_model_dir = f"models/{model_config['name']}-{len(puzzles)}-lora-{args.lora_r}"
     else:
         output_model_dir = args.output_model_dir
     trainer.save_model(output_model_dir)
