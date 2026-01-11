@@ -209,7 +209,6 @@ __marimo__/
 .*_api_key
 .*.py
 
-wtharvey-all.json
 models/*
 trainer_output
 wandb/*
