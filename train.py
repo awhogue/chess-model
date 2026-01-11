@@ -235,7 +235,7 @@ def main():
     if args.use_wandb:
         wandb.init(
             project="chess-puzzle-solver",
-            name=f"{model_config['name']}-{args.num_samples}-lora-{args.lora_r}",
+            name=f"{model_config['name']}-{len(puzzles)}-lora-{args.lora_r}",
             config={
                 "model": model_config["name"],
                 "lora_r": args.lora_r,
@@ -243,7 +243,7 @@ def main():
                 "learning_rate": 2e-4,
                 "batch_size": batch_size,
                 "gradient_accumulation_steps": args.grad_steps,
-                "dataset_size": args.num_samples,
+                "dataset_size": len(puzzles),
                 "epochs": args.epochs,
             }
         )
