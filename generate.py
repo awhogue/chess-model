@@ -39,10 +39,10 @@ def main():
         help='Model configuration (default: llama). Options: llama, qwen'
     )
     parser.add_argument(
-        '--trained-model-name',
+        '--trained-model-dir',
         type=str,
         default=None,
-        help='Trained model name or path (e.g., models/Llama-3.2-3B-10000-lora-64)'
+        help='Trained model directory (e.g., models/Llama-3.2-3B-10000-lora-64)'
     )
     parser.add_argument(
         '--num-problems',
