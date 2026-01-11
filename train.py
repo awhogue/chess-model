@@ -142,6 +142,23 @@ def main():
         default=32,
         help='LoRA rank (r) parameter (default: 32). lora_alpha will be set to 2 * lora_r.'
     )
+    parser.add_argument(
+        '--batch_size',
+        type=int,
+        help='Per device train batch size (default: 8 for CUDA, 2 for MPS/CPU)'
+    )
+    parser.add_argument(
+        '--grad_steps',
+        type=int,
+        default=4,
+        help='Gradient accumulation steps (default: 4)'
+    )
+    parser.add_argument(
+        '--epochs',
+        type=int,
+        default=3,
+        help='Number of training epochs (default: 3)'
+    )
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -202,6 +219,9 @@ def main():
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
     
+    # Use larger batch size on CUDA (more VRAM available) if not specified
+    batch_size = args.batch_size if args.batch_size is not None else (8 if device == "cuda" else 2)
+
     if args.use_wandb:
         wandb.init(
             project="chess-puzzle-solver",
@@ -211,23 +231,21 @@ def main():
                 "lora_r": args.lora_r,
                 "lora_alpha": 2 * args.lora_r,
                 "learning_rate": 2e-4,
-                "batch_size": 8,
+                "batch_size": batch_size,
+                "gradient_accumulation_steps": args.grad_steps,
                 "dataset_size": args.num_samples,
-                "epochs": 3,
+                "epochs": args.epochs,
             }
         )
-
-    # Use larger batch size on CUDA (more VRAM available)
-    batch_size = 8 if device == "cuda" else 2
 
     training_args = TrainingArguments(
         output_dir=args.output_model_dir,
         per_device_train_batch_size=batch_size,
-        gradient_accumulation_steps=4,  # Accumulate 4 steps before updating
+        gradient_accumulation_steps=args.grad_steps,
         gradient_checkpointing=False,  # Set True to trade off memory for speed
         bf16=(device == "cuda"),  # Use bfloat16 on CUDA
         fp16=(device == "mps"),   # Use float16 on MPS
-        num_train_epochs=3,
+        num_train_epochs=args.epochs,
         learning_rate=2e-4,
         warmup_steps=100,  # ~3% of training steps
         lr_scheduler_type="cosine",
