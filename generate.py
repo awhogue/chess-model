@@ -27,7 +27,7 @@ def main():
         epilog='Example: python generate.py --puzzle_file data/wtharvey-sample.json --model-config llama --num-problems 10'
     )
     parser.add_argument(
-        '--puzzle_file',
+        '--puzzle-file',
         type=str,
         default='data/wtharvey-sample.json',
         help='Path to JSON puzzle file (e.g., data/wtharvey-sample.json)'
