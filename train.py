@@ -109,7 +109,7 @@ def main():
         epilog='Example: python train.py --puzzle_file data/wtharvey-sample.json --model-name meta-llama/Llama-3.2-3B'
     )
     parser.add_argument(
-        '--puzzle_file',
+        '--puzzle-file',
         type=str,
         default='data/wtharvey-sample.json',
         help='Path to JSON puzzle file (e.g., data/wtharvey-sample.json)'
@@ -143,12 +143,12 @@ def main():
         help='LoRA rank (r) parameter (default: 32). lora_alpha will be set to 2 * lora_r.'
     )
     parser.add_argument(
-        '--batch_size',
+        '--batch-size',
         type=int,
         help='Per device train batch size (default: 8 for CUDA, 2 for MPS/CPU)'
     )
     parser.add_argument(
-        '--grad_steps',
+        '--grad-steps',
         type=int,
         default=4,
         help='Gradient accumulation steps (default: 4)'
