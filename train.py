@@ -92,7 +92,7 @@ class CustomTrainerCallback(TrainerCallback):
     
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
         if metrics:
-            print(f"  📊 Evaluation @ Step {state.global_step} | Eval Loss: {metrics.get('eval_loss', 0):.4f} | Accuracy: {metrics.get('mean_token_accuracy', 0)*100:>5.1f}%")
+            print(f"  📊 Evaluation @ Step {state.global_step} | Eval Loss: {metrics.get('eval_loss', 0):.4f} | Accuracy: {metrics.get('eval_accuracy', 0)*100:>5.1f}%")
 
     def on_train_end(self, args, state, control, **kwargs):
         total = time.time() - self.start_time
@@ -204,7 +204,7 @@ def main():
     attn_impl = None
     if device == "cuda":
         try:
-            import flash_attn
+            import flash_attn # type: ignore
             attn_impl = "flash_attention_2"
             print("Using Flash Attention 2")
         except ImportError:
