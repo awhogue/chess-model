@@ -212,3 +212,5 @@ __marimo__/
 models/*
 trainer_output
 wandb/*
+
+lichess_db_puzzle.csv
