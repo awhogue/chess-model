@@ -10,7 +10,7 @@ MODEL_CONFIGS = {
     "qwen": {
         "name": "Qwen/Qwen2.5-3B",
         "lora_targets": ["q_proj", "k_proj", "v_proj", "o_proj",
-                         # "gate_proj", "up_proj", "down_proj" Add these to train MLP layers
+                         "gate_proj", "up_proj", "down_proj" # Add these to train MLP layers
                          ],
     },
 }
