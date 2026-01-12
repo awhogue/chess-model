@@ -84,7 +84,7 @@ class CustomTrainerCallback(TrainerCallback):
                 f"[{progress*100:>5.1f}%] "
                 f"Step {state.global_step:>4}/{state.max_steps} | "
                 f"Loss {logs['loss']:.4f} | "
-                f"Accuracy {logs.get('mean_token_accuracy', 0)*100:>5.1f}% | "
+                f"Accuracy {logs.get('eval_mean_token_accuracy', 0)*100:>5.1f}% | "
                 f"LR {logs['learning_rate']:.2e} | "
                 f"ETA {int(eta//3600):>1}h {int((eta%3600)//60):>2}m | "
                 f"Speed {tok_per_sec:>8.1f} tokens/sec"
