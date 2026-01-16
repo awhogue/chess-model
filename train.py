@@ -163,6 +163,12 @@ def main():
         default=3,
         help='Number of training epochs (default: 3)'
     )
+    parser.add_argument(
+        '--learning-rate',
+        type=float,
+        default=2e-4,
+        help='Learning rate for training (default: 2e-4)'
+    )
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -242,7 +248,7 @@ def main():
                 "model": model_config["name"],
                 "lora_r": args.lora_r,
                 "lora_alpha": 2 * args.lora_r,
-                "learning_rate": 2e-4,
+                "learning_rate": args.learning_rate,
                 "batch_size": batch_size,
                 "gradient_accumulation_steps": args.grad_steps,
                 "dataset_size": len(puzzles),
@@ -258,7 +264,7 @@ def main():
         bf16=(device == "cuda"),  # Use bfloat16 on CUDA
         fp16=(device == "mps"),   # Use float16 on MPS
         num_train_epochs=args.epochs,
-        learning_rate=2e-4,
+        learning_rate=args.learning_rate,
         warmup_steps=100,  # ~3% of training steps
         lr_scheduler_type="cosine",
         optim="adamw_torch_fused" if device == "cuda" else "adamw_torch",
