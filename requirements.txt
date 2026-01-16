@@ -13,5 +13,5 @@ torch>=2.0.0
 tensorboard>=2.14.0
 trl>=0.7.0
 wandb>=0.16.0
-flash-attn>=2.0.0  # Optional: faster attention on CUDA (requires: pip install flash-attn --no-build-isolation)
+#flash-attn>=2.0.0  # Optional: faster attention on CUDA (requires: pip install flash-attn --no-build-isolation)
 
