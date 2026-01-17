@@ -238,6 +238,8 @@ def main():
         task_type="CAUSAL_LM",
     )
     model = get_peft_model(model, lora_config)
+    # Required for gradient checkpointing with LoRA
+    model.enable_input_require_grads()
     model.print_trainable_parameters()
     
     # Use larger batch size on CUDA (more VRAM available) if not specified
@@ -270,6 +272,7 @@ def main():
         per_device_train_batch_size=batch_size,
         gradient_accumulation_steps=args.grad_steps,
         gradient_checkpointing=(device == "cuda"),
+        gradient_checkpointing_kwargs={"use_reentrant": False} if device == "cuda" else None,
         bf16=(device == "cuda"),  # Use bfloat16 on CUDA
         fp16=(device == "mps"),   # Use float16 on MPS
         num_train_epochs=args.epochs,
