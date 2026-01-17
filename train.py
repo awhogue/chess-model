@@ -302,7 +302,7 @@ def main():
         train_dataset=puzzles_dataset["train"],
         eval_dataset=puzzles_dataset["test"],
         args=training_args,
-        processing_class=tokenizer,
+        tokenizer=tokenizer,
         data_collator=data_collator,
         callbacks=[CustomTrainerCallback()],
     )
