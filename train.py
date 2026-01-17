@@ -243,10 +243,16 @@ def main():
     # Use larger batch size on CUDA (more VRAM available) if not specified
     batch_size = args.batch_size if args.batch_size is not None else (8 if device == "cuda" else 2)
 
+    # Determine output directory
+    if not args.output_model_dir:
+        output_model_dir = f"models/{model_config['name']}-{len(puzzles)}-lora-{args.lora_r}-epochs-{args.epochs}"
+    else:
+        output_model_dir = args.output_model_dir
+
     if args.use_wandb:
         wandb.init(
             project="chess-puzzle-solver",
-            name=f"{model_config['name']}-{len(puzzles)}-lora-{args.lora_r}",
+            name=f"{model_config['name']}-{len(puzzles)}-lora-{args.lora_r}-epochs-{args.epochs}",
             config={
                 "model": model_config["name"],
                 "lora_r": args.lora_r,
@@ -260,7 +266,7 @@ def main():
         )
 
     training_args = TrainingArguments(
-        output_dir=args.output_model_dir,
+        output_dir=output_model_dir,
         per_device_train_batch_size=batch_size,
         gradient_accumulation_steps=args.grad_steps,
         gradient_checkpointing=(device == "cuda"),
@@ -303,14 +309,13 @@ def main():
     trainer.remove_callback(PrinterCallback)
 
     # Print all configuration before training starts
-    output_model_dir_display = args.output_model_dir or f"models/{model_config['name']}-{len(puzzles)}-lora-{args.lora_r}"
     print("\n" + "="*70)
     print("📋 Training Configuration")
     print("="*70)
     print(f"  Puzzle file:           {args.puzzle_file}")
     print(f"  Model config:          {args.model_config} ({model_config['name']})")
     print(f"  Number of samples:     {len(puzzles)}")
-    print(f"  Output model dir:      {output_model_dir_display}")
+    print(f"  Output model dir:      {output_model_dir}")
     print(f"  LoRA rank (r):         {args.lora_r}")
     print(f"  LoRA alpha:            {2 * args.lora_r}")
     print(f"  Batch size:            {batch_size}")
@@ -323,10 +328,6 @@ def main():
     print("="*70 + "\n")
 
     trainer.train()
-    if not args.output_model_dir:
-        output_model_dir = f"models/{model_config['name']}-{len(puzzles)}-lora-{args.lora_r}"
-    else:
-        output_model_dir = args.output_model_dir
     trainer.save_model(output_model_dir)
     print(f"Model saved to: {output_model_dir}")
     return 0
