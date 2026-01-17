@@ -304,6 +304,7 @@ def main():
         args=training_args,
         tokenizer=tokenizer,
         data_collator=data_collator,
+        dataset_text_field="text",
         callbacks=[CustomTrainerCallback()],
     )
     trainer.remove_callback(PrinterCallback)
