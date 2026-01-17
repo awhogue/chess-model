@@ -5,14 +5,15 @@ requests>=2.31.0
 beautifulsoup4>=4.12.0
 
 # Hugging Face dependencies for training
-numpy>=2.0.0
-transformers>=4.46.0
+numpy>=1.24.0,<2.0.0
+transformers>=4.44.0,<4.45.0
 datasets>=2.14.0
 peft>=0.6.0
 accelerate>=0.24.0
 torch>=2.0.0
 tensorboard>=2.14.0
-trl>=0.12.0
+trl>=0.9.0,<0.10.0
 wandb>=0.16.0
+scipy>=1.11.0
 #flash-attn>=2.0.0  # Optional: faster attention on CUDA (requires: pip install flash-attn --no-build-isolation)
 
