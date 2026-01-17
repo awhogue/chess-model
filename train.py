@@ -302,6 +302,26 @@ def main():
     )
     trainer.remove_callback(PrinterCallback)
 
+    # Print all configuration before training starts
+    output_model_dir_display = args.output_model_dir or f"models/{model_config['name']}-{len(puzzles)}-lora-{args.lora_r}"
+    print("\n" + "="*70)
+    print("📋 Training Configuration")
+    print("="*70)
+    print(f"  Puzzle file:           {args.puzzle_file}")
+    print(f"  Model config:          {args.model_config} ({model_config['name']})")
+    print(f"  Number of samples:     {len(puzzles)}")
+    print(f"  Output model dir:      {output_model_dir_display}")
+    print(f"  LoRA rank (r):         {args.lora_r}")
+    print(f"  LoRA alpha:            {2 * args.lora_r}")
+    print(f"  Batch size:            {batch_size}")
+    print(f"  Gradient steps:        {args.grad_steps}")
+    print(f"  Effective batch size:  {batch_size * args.grad_steps}")
+    print(f"  Epochs:                {args.epochs}")
+    print(f"  Learning rate:         {args.learning_rate}")
+    print(f"  Use wandb:             {args.use_wandb}")
+    print(f"  Device:                {device}")
+    print("="*70 + "\n")
+
     trainer.train()
     if not args.output_model_dir:
         output_model_dir = f"models/{model_config['name']}-{len(puzzles)}-lora-{args.lora_r}"
