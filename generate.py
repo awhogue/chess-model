@@ -78,17 +78,20 @@ def main():
     model_config = MODEL_CONFIGS[args.model_config]
     base_model_name = model_config["name"]
     
+    # Use bfloat16 on CUDA (matches training), float16 on MPS/CPU
+    model_dtype = torch.bfloat16 if device == "cuda" else torch.float16
+
     # Load model and tokenizer
     print(f"Loading tokenizer: {base_model_name}")
     tokenizer = AutoTokenizer.from_pretrained(
         base_model_name,
-        padding_side="left",
+        padding_side="left",  # Left-padding is standard for generation
     )
     tokenizer.pad_token = tokenizer.eos_token
     print(f"Loading base model: {base_model_name}")
     model = AutoModelForCausalLM.from_pretrained(
         base_model_name,
-        dtype=torch.float16,
+        torch_dtype=model_dtype,
         device_map="auto",
         low_cpu_mem_usage=True,
     )
@@ -100,6 +103,9 @@ def main():
         )
     else:
         print(f"No LoRA adapters found, using base model")
+
+    # Set model to evaluation mode (disables dropout, etc.)
+    model.eval()
 
     try:
         puzzles = load_puzzle_data(args.puzzle_file)

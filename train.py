@@ -10,7 +10,7 @@ from pathlib import Path
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, TrainerCallback
 from transformers.trainer_callback import PrinterCallback
 from peft import LoraConfig, get_peft_model
-from trl import SFTTrainer
+from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
 from huggingface_hub import login
 from datasets import Dataset
 import wandb
@@ -49,13 +49,16 @@ def get_huggingface_api_key():
 
     return api_key
 
+RESPONSE_TEMPLATE = "JSON Output:\n"
+
 def training_example(puzzle: ChessPuzzle, tokenizer: AutoTokenizer) -> str:
     """
     Create a training example from a puzzle.
+    The response template "JSON Output:\n" marks where the completion begins.
+    Only tokens after this template will be used for loss computation.
     """
     prompt = f"""Analyze the following chess position and output the best sequence of moves: {puzzle.fen}
-JSON Output:
-{{ "solution": "{puzzle.solution}" }}{tokenizer.eos_token}"""
+{RESPONSE_TEMPLATE}{{ "solution": "{puzzle.solution}" }}{tokenizer.eos_token}"""
     return {"text": prompt}
 
 class CustomTrainerCallback(TrainerCallback):
@@ -282,12 +285,19 @@ def main():
         dataloader_num_workers=4 if device == "cuda" else 0,
     )
 
+    # Create data collator that only computes loss on completion tokens (after "JSON Output:\n")
+    data_collator = DataCollatorForCompletionOnlyLM(
+        response_template=RESPONSE_TEMPLATE,
+        tokenizer=tokenizer,
+    )
+
     trainer = SFTTrainer(
         model=model,
         train_dataset=puzzles_dataset["train"],
         eval_dataset=puzzles_dataset["test"],
         args=training_args,
         processing_class=tokenizer,
+        data_collator=data_collator,
         callbacks=[CustomTrainerCallback()],
     )
     trainer.remove_callback(PrinterCallback)
