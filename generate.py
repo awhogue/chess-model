@@ -16,9 +16,11 @@ from peft import PeftModel
 from util import full_puzzle_prompt, ChessPuzzle, load_puzzle_data, PuzzleResponse
 from config import MODEL_CONFIGS
 
+RESPONSE_TEMPLATE = "JSON Output:\n"
+
 def generate_prompt(puzzle: ChessPuzzle) -> str:
     return f"""Analyze the following chess position and output the best sequence of moves: {puzzle.fen}
-JSON Output:"""
+{RESPONSE_TEMPLATE}"""
 
 def main():
     parser = argparse.ArgumentParser(
@@ -140,11 +142,8 @@ def main():
 
         with torch.no_grad():
             generated_ids = model.generate(**inputs,
-                max_new_tokens=500, repetition_penalty=1.5,  # Higher = more penalty for repeating
-                no_repeat_ngram_size=3,  # Don't repeat 3-grams
-                temperature=0.7,
-                top_p=0.9,
-                do_sample=True,
+                max_new_tokens=100,  # JSON response is short
+                do_sample=False,  # Greedy decoding for deterministic output
                 pad_token_id=tokenizer.eos_token_id)
         generated_text_batch = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         all_generated_texts.extend(generated_text_batch)
