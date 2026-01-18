@@ -13,7 +13,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 
-from util import full_puzzle_prompt, ChessPuzzle, load_puzzle_data, PuzzleResponse
+from util import full_puzzle_prompt, ChessPuzzle, load_puzzle_data, PuzzleResponse, compare_solutions
 from config import MODEL_CONFIGS
 
 RESPONSE_TEMPLATE = "JSON Output:\n"
@@ -169,21 +169,34 @@ def main():
         
         try:
             model_response = PuzzleResponse.model_validate(json.loads(output_truncated))
+            comparison = compare_solutions(puzzle.solution, model_response.solution)
+
             print(f"Model solution: {model_response.solution}")
-            correct = model_response.solution == puzzle.solution
-            print(f"Correct: {correct}")
-            
+            if comparison.exact_match:
+                print(f"Result: EXACT MATCH")
+            elif comparison.normalized_match:
+                print(f"Result: NORMALIZED MATCH (move numbers differ)")
+            elif comparison.first_move_correct:
+                print(f"Result: PARTIAL ({comparison.correct_moves}/{comparison.total_moves} moves, {comparison.partial_score:.0%})")
+            else:
+                print(f"Result: INCORRECT (0/{comparison.total_moves} moves)")
+
             result = {
                 "fen": puzzle.fen,
                 "description": puzzle.description,
                 "citation": puzzle.citation,
                 "expected_solution": puzzle.solution,
                 "model_solution": model_response.solution,
-                "correct": correct
+                "exact_match": comparison.exact_match,
+                "normalized_match": comparison.normalized_match,
+                "first_move_correct": comparison.first_move_correct,
+                "correct_moves": comparison.correct_moves,
+                "total_moves": comparison.total_moves,
+                "partial_score": comparison.partial_score,
             }
         except (json.JSONDecodeError, ValueError, AttributeError) as e:
-            print(f"Error: Invalid JSON response: {e}")
-            print(f"Output: {output_truncated}")
+            print(f"Result: PARSE ERROR - {e}")
+            print(f"Output: {output_truncated[:100]}")
             result = {
                 "fen": puzzle.fen,
                 "description": puzzle.description,
@@ -199,14 +212,28 @@ def main():
     print("\n" + "=" * 80)
     print("RESULTS SUMMARY")
     print("=" * 80)
-    num_correct = sum(1 for r in results if r.get('correct', False))
-    num_incorrect = sum(1 for r in results if 'correct' in r and not r['correct'])
-    num_errors = sum(1 for r in results if 'error' in r)
-    print(f"Correct solutions: {num_correct}")
-    print(f"Incorrect solutions: {num_incorrect}")
-    print(f"Errors: {num_errors}")
+
+    valid_results = [r for r in results if 'error' not in r]
+    num_errors = len(results) - len(valid_results)
+
+    num_exact = sum(1 for r in valid_results if r.get('exact_match', False))
+    num_normalized = sum(1 for r in valid_results if r.get('normalized_match', False))
+    num_first_move = sum(1 for r in valid_results if r.get('first_move_correct', False))
+    total_partial_score = sum(r.get('partial_score', 0) for r in valid_results)
+
+    print(f"Total puzzles: {len(results)}")
+    print(f"Parse errors: {num_errors}")
+    print(f"")
+    print(f"Exact matches: {num_exact}")
+    print(f"Normalized matches: {num_normalized} (correct moves, different formatting)")
+    print(f"First move correct: {num_first_move}")
+    print(f"")
     if len(results) > 0:
-        print(f"Accuracy: {num_correct / len(results):.2%}")
+        print(f"Exact accuracy: {num_exact / len(results):.2%}")
+        print(f"Normalized accuracy: {num_normalized / len(results):.2%}")
+        print(f"First-move accuracy: {num_first_move / len(results):.2%}")
+    if len(valid_results) > 0:
+        print(f"Average partial score: {total_partial_score / len(valid_results):.2%}")
     print(f"Total generation time: {elapsed_time:.2f} seconds")
     print(f"Average time per puzzle: {elapsed_time / num_problems:.2f} seconds")
     
