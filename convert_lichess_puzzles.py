@@ -35,6 +35,12 @@ def parse_args():
         default=None,
         help="Filter by theme(s). Comma-separated for multiple themes (puzzle must match ALL)",
     )
+    parser.add_argument(
+        "--skip",
+        type=int,
+        default=0,
+        help="Skip the first N puzzles before outputting (default: 0)",
+    )
     return parser.parse_args()
 
 
@@ -142,6 +148,15 @@ def main():
     if args.limit:
         puzzles = puzzles[:args.limit]
         print(f"Taking top {len(puzzles)} most popular puzzles")
+
+    # Skip first N puzzles if specified
+    if args.skip > 0:
+        if args.skip >= len(puzzles):
+            print(f"Warning: --skip {args.skip} is >= total puzzles {len(puzzles)}, no puzzles will be output", file=sys.stderr)
+            puzzles = []
+        else:
+            puzzles = puzzles[args.skip:]
+            print(f"Skipped first {args.skip} puzzles, {len(puzzles)} remaining")
 
     # Convert puzzles
     converted = []
