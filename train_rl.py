@@ -476,12 +476,21 @@ def main():
             for f, s, m in zip(fmt_rewards, sf_rewards, sol_rewards)
         ]
 
+    # GRPOConfig defaults generation_batch_size to per_device_train_batch_size,
+    # but it must be divisible by num_generations. Auto-fix if needed.
+    generation_batch_size = batch_size
+    if generation_batch_size % args.num_generations != 0:
+        generation_batch_size = args.num_generations
+        print(f"Warning: generation_batch_size ({batch_size}) not divisible by num_generations ({args.num_generations}), "
+              f"setting generation_batch_size={generation_batch_size}")
+
     # GRPO config
     grpo_config = GRPOConfig(
         output_dir=output_model_dir,
         learning_rate=args.learning_rate,
         beta=args.beta,
         num_generations=args.num_generations,
+        generation_batch_size=generation_batch_size,
         max_completion_length=args.max_completion_length,
         temperature=args.temperature,
         per_device_train_batch_size=batch_size,
