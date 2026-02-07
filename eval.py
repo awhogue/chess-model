@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate responses for chess puzzles using a language model.
+Evaluate responses for chess puzzles using a language model.
 """
 
 import argparse
@@ -18,15 +18,15 @@ from config import MODEL_CONFIGS
 
 RESPONSE_TEMPLATE = "JSON Output:\n"
 
-def generate_prompt(puzzle: ChessPuzzle) -> str:
+def eval_prompt(puzzle: ChessPuzzle) -> str:
     return f"""Analyze the following chess position and output the best sequence of moves: {puzzle.fen}
 {RESPONSE_TEMPLATE}"""
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Generate responses for chess puzzles using a language model',
+        description='Evaluate responses for chess puzzles using a language model',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog='Example: python generate.py --puzzle_file data/wtharvey-sample.json --model-config llama --num-problems 10'
+        epilog='Example: python eval.py --puzzle_file data/wtharvey-sample.json --model-config llama --num-problems 10'
     )
     parser.add_argument(
         '--puzzle-file',
@@ -137,7 +137,7 @@ def main():
 
         print(f"Processing batch {batch_start // args.batch_size + 1}/{(len(puzzles_to_process) + args.batch_size - 1) // args.batch_size} ({len(batch_puzzles)} puzzles)")
 
-        prompt_batch = [generate_prompt(puzzle) for puzzle in batch_puzzles]
+        prompt_batch = [eval_prompt(puzzle) for puzzle in batch_puzzles]
         inputs = tokenizer(prompt_batch, return_tensors="pt", padding=True, truncation=True).to(model.device)
 
         with torch.no_grad():
