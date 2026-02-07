@@ -158,7 +158,7 @@ def main():
 
     # Process and display results
     results = []
-    all_prompts = [generate_prompt(puzzle) for puzzle in puzzles_to_process]
+    all_prompts = [eval_prompt(puzzle) for puzzle in puzzles_to_process]
 
     for puzzle, prompt, output in zip(puzzles_to_process, all_prompts, all_generated_texts):
         output_truncated = output.replace(prompt, '').strip()
@@ -236,12 +236,41 @@ def main():
         print(f"Average partial score: {total_partial_score / len(valid_results):.2%}")
     print(f"Total generation time: {elapsed_time:.2f} seconds")
     print(f"Average time per puzzle: {elapsed_time / num_problems:.2f} seconds")
-    
+
+    # Build run config and stats for saving
+    run_config = {
+        "puzzle_file": args.puzzle_file,
+        "model_config": args.model_config,
+        "base_model_name": base_model_name,
+        "trained_model_dir": args.trained_model_dir,
+        "num_problems": num_problems,
+        "batch_size": args.batch_size,
+        "device": device,
+    }
+    stats = {
+        "total_puzzles": len(results),
+        "parse_errors": num_errors,
+        "exact_matches": num_exact,
+        "normalized_matches": num_normalized,
+        "first_move_correct": num_first_move,
+        "exact_accuracy": num_exact / len(results) if results else 0,
+        "normalized_accuracy": num_normalized / len(results) if results else 0,
+        "first_move_accuracy": num_first_move / len(results) if results else 0,
+        "average_partial_score": total_partial_score / len(valid_results) if valid_results else 0,
+        "total_generation_time_seconds": elapsed_time,
+        "average_time_per_puzzle_seconds": elapsed_time / num_problems if num_problems else 0,
+    }
+
     # Save results if output file specified
     if args.output:
         output_file = Path(args.output)
+        output_data = {
+            "config": run_config,
+            "stats": stats,
+            "results": results,
+        }
         with open(output_file, 'w') as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
+            json.dump(output_data, f, indent=2, ensure_ascii=False)
         print(f"\nResults saved to: {output_file}")
     
     return 0
