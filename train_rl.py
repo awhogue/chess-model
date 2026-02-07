@@ -439,7 +439,7 @@ def main():
     # Output directory
     if not args.output_model_dir:
         suffix = "-sft" if merged_sft else ""
-        output_model_dir = f"models/{base_model_name}-{len(puzzles)}-rl-lora-{args.lora_r}{suffix}"
+        output_model_dir = f"models/{base_model_name}-{len(puzzles)}-rl-steps-{args.max_steps}-lora-{args.lora_r}{suffix}"
     else:
         output_model_dir = args.output_model_dir
 
