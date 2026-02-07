@@ -417,6 +417,9 @@ def main():
         model = PeftModel.from_pretrained(model, args.sft_adapter_dir)
         print("Merging SFT adapters into base model")
         model = model.merge_and_unload()
+        # Remove residual peft metadata so GRPOTrainer doesn't warn about multiple adapters
+        if hasattr(model, "peft_config"):
+            del model.peft_config
         merged_sft = True
 
     # Fresh LoRA config for RL phase
