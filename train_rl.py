@@ -303,8 +303,8 @@ def main():
                         help='Completions per prompt for GRPO (default: 4)')
     parser.add_argument('--max-completion-length', type=int, default=100,
                         help='Max tokens per completion (default: 100)')
-    parser.add_argument('--temperature', type=float, default=0.7,
-                        help='Sampling temperature (default: 0.7)')
+    parser.add_argument('--temperature', type=float, default=1.0,
+                        help='Sampling temperature (default: 1.0)')
     parser.add_argument('--reward-weights', type=float, nargs=3, default=[0.2, 0.6, 0.2],
                         metavar=('FORMAT', 'STOCKFISH', 'SOLUTION'),
                         help='Weights for [format, stockfish, solution] rewards (default: 0.2 0.6 0.2)')
@@ -317,9 +317,11 @@ def main():
     parser.add_argument('--stockfish-time-limit', type=float, default=0.1,
                         help='Stockfish time limit per evaluation in seconds (default: 0.1)')
 
-    # Test mode
+    # Test/debug modes
     parser.add_argument('--test-rewards', action='store_true',
                         help='Test reward functions on a few puzzles and exit')
+    parser.add_argument('--debug-rewards', action='store_true',
+                        help='Log completions and per-component rewards for the first few steps')
 
     args = parser.parse_args()
 
@@ -469,15 +471,28 @@ def main():
 
     # Build weighted reward function
     w_fmt, w_sf, w_sol = args.reward_weights
+    _reward_call_count = 0
+    _debug_rewards = args.debug_rewards
 
-    def combined_reward_fn(completions: list[str], **kwargs) -> list[float]:
+    def combined_reward_fn(completions, **kwargs) -> list[float]:
+        nonlocal _reward_call_count
+        _reward_call_count += 1
+
         fmt_rewards = format_reward_fn(completions, **kwargs)
         sf_rewards = stockfish_reward_fn(completions, **kwargs)
         sol_rewards = solution_match_reward_fn(completions, **kwargs)
-        return [
+        combined = [
             w_fmt * f + w_sf * s + w_sol * m
             for f, s, m in zip(fmt_rewards, sf_rewards, sol_rewards)
         ]
+
+        if _debug_rewards and _reward_call_count <= 3:
+            print(f"\n[DEBUG reward call #{_reward_call_count}]")
+            for i, c in enumerate(completions[:4]):
+                print(f"  [{i}] {repr(c)[:100]}")
+                print(f"      fmt={fmt_rewards[i]:+.2f} sf={sf_rewards[i]:+.3f} sol={sol_rewards[i]:.3f} -> combined={combined[i]:+.3f}")
+
+        return combined
 
     # GRPOConfig defaults generation_batch_size to per_device_train_batch_size,
     # but it must be divisible by num_generations. Auto-fix if needed.
