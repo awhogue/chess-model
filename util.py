@@ -5,9 +5,12 @@ Utility functions for chess puzzle processing.
 
 import json
 import re
+import shutil
+import chess
+import chess.engine
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 from pydantic import BaseModel
 
 
@@ -160,4 +163,106 @@ def compare_solutions(expected: str, model: str) -> SolutionComparison:
         expected_moves=expected_moves,
         model_moves=model_moves,
     )
+
+
+def find_stockfish(stockfish_path: Optional[str] = None) -> str:
+    """
+    Find the Stockfish binary path.
+
+    Searches shutil.which() first, then common installation paths.
+
+    Args:
+        stockfish_path: Explicit path to Stockfish binary (returned directly if provided)
+
+    Returns:
+        Path to Stockfish binary
+
+    Raises:
+        FileNotFoundError: If Stockfish is not found
+    """
+    if stockfish_path:
+        return stockfish_path
+
+    found = shutil.which("stockfish")
+    if found:
+        return found
+
+    common_paths = [
+        "/opt/homebrew/bin/stockfish",
+        "/usr/local/bin/stockfish",
+        "/usr/bin/stockfish",
+        "/snap/bin/stockfish",
+    ]
+    for path in common_paths:
+        if Path(path).is_file():
+            return path
+
+    raise FileNotFoundError(
+        "Stockfish not found. Install it:\n"
+        "  macOS:         brew install stockfish\n"
+        "  Ubuntu/Debian: apt install stockfish\n"
+        "  Other:         https://stockfishchess.org/download/\n"
+        "Or pass --stockfish-path /path/to/stockfish"
+    )
+
+
+class StockfishManager:
+    """Context manager for a reusable Stockfish engine instance."""
+
+    def __init__(self, stockfish_path: str, depth: int = 15, time_limit: float = 0.1):
+        self.stockfish_path = stockfish_path
+        self.depth = depth
+        self.time_limit = time_limit
+        self.engine: Optional[chess.engine.SimpleEngine] = None
+
+    def start(self):
+        self.engine = chess.engine.SimpleEngine.popen_uci(self.stockfish_path)
+        self.engine.configure({"Threads": 1, "Hash": 64})
+
+    def stop(self):
+        if self.engine:
+            try:
+                self.engine.quit()
+            except chess.engine.EngineTerminatedError:
+                pass
+            self.engine = None
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
+        return False
+
+    def _ensure_engine(self):
+        """Restart engine if it has terminated."""
+        if self.engine is None:
+            self.start()
+
+    def evaluate_position(self, board: chess.Board) -> int:
+        """
+        Evaluate a position from the current side to move's perspective.
+
+        Returns centipawn score (mate scores clamped to +/-10000).
+        """
+        self._ensure_engine()
+        info = self.engine.analyse(
+            board,
+            chess.engine.Limit(depth=self.depth, time=self.time_limit),
+        )
+        score = info["score"].relative
+        if score.is_mate():
+            mate_in = score.mate()
+            return 10000 if mate_in > 0 else -10000
+        return score.score()
+
+    def get_best_move(self, board: chess.Board) -> chess.Move:
+        """Return Stockfish's best move for the position."""
+        self._ensure_engine()
+        result = self.engine.play(
+            board,
+            chess.engine.Limit(depth=self.depth, time=self.time_limit),
+        )
+        return result.move
 

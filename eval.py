@@ -9,11 +9,15 @@ import sys
 import time
 from pathlib import Path
 
+import chess
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 
-from util import full_puzzle_prompt, ChessPuzzle, load_puzzle_data, PuzzleResponse, compare_solutions
+from util import (
+    full_puzzle_prompt, ChessPuzzle, load_puzzle_data, PuzzleResponse,
+    compare_solutions, normalize_solution, find_stockfish, StockfishManager,
+)
 from config import MODEL_CONFIGS
 
 RESPONSE_TEMPLATE = "JSON Output:\n"
@@ -64,6 +68,18 @@ def main():
         default=8,
         help='Number of puzzles to process in each batch (default: 8)'
     )
+    parser.add_argument(
+        '--stockfish-path',
+        type=str,
+        default=None,
+        help='Path to Stockfish binary (auto-detected if not provided). Enables Stockfish move quality scoring.'
+    )
+    parser.add_argument(
+        '--stockfish-depth',
+        type=int,
+        default=15,
+        help='Stockfish search depth for move evaluation (default: 15)'
+    )
     args = parser.parse_args()
     
     # Determine device
@@ -73,6 +89,19 @@ def main():
         print(f"Emptying MPS cache")
         torch.mps.empty_cache()
     
+    # Try to initialize Stockfish
+    stockfish_manager = None
+    try:
+        sf_path = find_stockfish(args.stockfish_path)
+        stockfish_manager = StockfishManager(sf_path, depth=args.stockfish_depth)
+        stockfish_manager.start()
+        print(f"Stockfish: {sf_path} (depth={args.stockfish_depth})")
+    except FileNotFoundError:
+        if args.stockfish_path:
+            print(f"Warning: Stockfish not found at {args.stockfish_path}", file=sys.stderr)
+        else:
+            print("Note: Stockfish not found, skipping Stockfish move quality scoring.")
+
     # Get model configuration
     if args.model_config not in MODEL_CONFIGS:
         print(f"Error: Unknown model config '{args.model_config}'. Available: {list(MODEL_CONFIGS.keys())}", file=sys.stderr)
@@ -181,6 +210,26 @@ def main():
             else:
                 print(f"Result: INCORRECT (0/{comparison.total_moves} moves)")
 
+            # Stockfish evaluation of model's first move
+            stockfish_cp_loss = None
+            illegal_move = False
+            if stockfish_manager and comparison.model_moves:
+                try:
+                    board = chess.Board(puzzle.fen)
+                    first_move_san = comparison.model_moves[0]
+                    model_move = board.parse_san(first_move_san)
+                    best_eval = stockfish_manager.evaluate_position(board)
+                    board.push(model_move)
+                    model_eval = -stockfish_manager.evaluate_position(board)
+                    stockfish_cp_loss = best_eval - model_eval
+                    print(f"Stockfish cp loss: {stockfish_cp_loss}")
+                except (chess.InvalidMoveError, chess.IllegalMoveError,
+                        chess.AmbiguousMoveError):
+                    illegal_move = True
+                    print(f"Illegal move: {comparison.model_moves[0]}")
+                except Exception:
+                    stockfish_cp_loss = None
+
             result = {
                 "fen": puzzle.fen,
                 "description": puzzle.description,
@@ -193,6 +242,8 @@ def main():
                 "correct_moves": comparison.correct_moves,
                 "total_moves": comparison.total_moves,
                 "partial_score": comparison.partial_score,
+                "stockfish_cp_loss": stockfish_cp_loss,
+                "illegal_move": illegal_move,
             }
         except (json.JSONDecodeError, ValueError, AttributeError) as e:
             print(f"Result: PARSE ERROR - {e}")
@@ -221,8 +272,11 @@ def main():
     num_first_move = sum(1 for r in valid_results if r.get('first_move_correct', False))
     total_partial_score = sum(r.get('partial_score', 0) for r in valid_results)
 
+    num_illegal = sum(1 for r in valid_results if r.get('illegal_move', False))
+
     print(f"Total puzzles: {len(results)}")
     print(f"Parse errors: {num_errors}")
+    print(f"Illegal moves: {num_illegal}")
     print(f"")
     print(f"Exact matches: {num_exact}")
     print(f"Normalized matches: {num_normalized} (correct moves, different formatting)")
@@ -234,6 +288,16 @@ def main():
         print(f"First-move accuracy: {num_first_move / len(results):.2%}")
     if len(valid_results) > 0:
         print(f"Average partial score: {total_partial_score / len(valid_results):.2%}")
+
+    # Stockfish summary
+    sf_losses = [r['stockfish_cp_loss'] for r in valid_results if r.get('stockfish_cp_loss') is not None]
+    if sf_losses:
+        avg_cp_loss = sum(sf_losses) / len(sf_losses)
+        optimal_count = sum(1 for cp in sf_losses if cp == 0)
+        print(f"")
+        print(f"Average Stockfish cp loss: {avg_cp_loss:.1f} (lower is better, {len(sf_losses)} evaluated)")
+        print(f"Optimal move rate: {optimal_count / len(sf_losses):.2%} ({optimal_count}/{len(sf_losses)})")
+
     print(f"Total generation time: {elapsed_time:.2f} seconds")
     print(f"Average time per puzzle: {elapsed_time / num_problems:.2f} seconds")
 
@@ -250,6 +314,7 @@ def main():
     stats = {
         "total_puzzles": len(results),
         "parse_errors": num_errors,
+        "illegal_moves": num_illegal,
         "exact_matches": num_exact,
         "normalized_matches": num_normalized,
         "first_move_correct": num_first_move,
@@ -260,6 +325,10 @@ def main():
         "total_generation_time_seconds": elapsed_time,
         "average_time_per_puzzle_seconds": elapsed_time / num_problems if num_problems else 0,
     }
+    if sf_losses:
+        stats["average_stockfish_cp_loss"] = sum(sf_losses) / len(sf_losses)
+        stats["optimal_move_rate"] = sum(1 for cp in sf_losses if cp == 0) / len(sf_losses)
+        stats["stockfish_evaluated_count"] = len(sf_losses)
 
     # Save results if output file specified
     if args.output:
@@ -272,7 +341,11 @@ def main():
         with open(output_file, 'w') as f:
             json.dump(output_data, f, indent=2, ensure_ascii=False)
         print(f"\nResults saved to: {output_file}")
-    
+
+    # Cleanup Stockfish
+    if stockfish_manager:
+        stockfish_manager.stop()
+
     return 0
 
 
