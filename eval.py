@@ -131,6 +131,7 @@ def main():
         model = PeftModel.from_pretrained(
             model,
             args.trained_model_dir,
+            low_cpu_mem_usage=False,
         )
     else:
         print(f"No LoRA adapters found, using base model")
