@@ -111,6 +111,8 @@ def main():
     
     # Use bfloat16 on CUDA (matches training), float16 on MPS/CPU
     model_dtype = torch.bfloat16 if device == "cuda" else torch.float16
+    # Use "auto" device_map on CUDA for multi-GPU support, specific device otherwise
+    model_device_map = "auto" if device == "cuda" else device
 
     # Load model and tokenizer
     print(f"Loading tokenizer: {base_model_name}")
@@ -123,7 +125,7 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(
         base_model_name,
         torch_dtype=model_dtype,
-        device_map="auto",
+        device_map=model_device_map,
         low_cpu_mem_usage=True,
     )
     if args.trained_model_dir:
