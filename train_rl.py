@@ -217,7 +217,7 @@ class CustomRLCallback(TrainerCallback):
             avg_reward = sum(recent_rewards) / len(recent_rewards) if recent_rewards else 0
 
             loss_str = f"Loss {loss:.4f}" if loss is not None else ""
-            reward_str = f"Reward {reward:.3f} (avg{len(recent_rewards)}: {avg_reward:.3f})" if reward is not None else ""
+            reward_str = f"Reward {reward:.3f} (avg{self.rolling_window}: {avg_reward:.3f})" if reward is not None else ""
 
             parts = [
                 f"[{progress * 100:>5.1f}%]",
