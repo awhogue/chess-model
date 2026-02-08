@@ -51,6 +51,12 @@ def main():
         help='Trained model directory (e.g., models/Llama-3.2-3B-10000-lora-64)'
     )
     parser.add_argument(
+        '--sft-adapter-dir',
+        type=str,
+        default=None,
+        help='SFT LoRA adapter directory to merge before loading RL adapters (required when evaluating RL models)'
+    )
+    parser.add_argument(
         '--num-problems',
         type=int,
         default=1,
@@ -128,6 +134,15 @@ def main():
         device_map=model_device_map,
         low_cpu_mem_usage=True,
     )
+    # Merge SFT adapters first if provided (required for evaluating RL models)
+    if args.sft_adapter_dir:
+        print(f"Loading SFT LoRA adapters: {args.sft_adapter_dir}")
+        model = PeftModel.from_pretrained(model, args.sft_adapter_dir, low_cpu_mem_usage=False)
+        print("Merging SFT adapters into base model")
+        model = model.merge_and_unload()
+        if hasattr(model, "peft_config"):
+            del model.peft_config
+
     if args.trained_model_dir:
         print(f"Loading LoRA adapters: {args.trained_model_dir}")
         model = PeftModel.from_pretrained(
@@ -309,6 +324,7 @@ def main():
         "puzzle_file": args.puzzle_file,
         "model_config": args.model_config,
         "base_model_name": base_model_name,
+        "sft_adapter_dir": args.sft_adapter_dir,
         "trained_model_dir": args.trained_model_dir,
         "num_problems": num_problems,
         "batch_size": args.batch_size,
