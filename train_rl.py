@@ -185,8 +185,11 @@ def solution_match_reward_fn(completions: list[str], expected_solution: list[str
 # ---------------------------------------------------------------------------
 
 class CustomRLCallback(TrainerCallback):
-    def __init__(self):
+    def __init__(self, rolling_window: int = 50):
         self.start_time = None
+        self.rolling_window = rolling_window
+        self.reward_history = []
+        self.loss_history = []
 
     def on_train_begin(self, args, state, control, **kwargs):
         self.start_time = time.time()
@@ -201,12 +204,20 @@ class CustomRLCallback(TrainerCallback):
             progress = state.global_step / state.max_steps
             eta = (elapsed / progress) * (1 - progress) if progress > 0 else 0
 
-            loss_str = f"Loss {logs['loss']:.4f}" if 'loss' in logs else ""
-            reward_str = ""
-            if 'reward' in logs:
-                reward_str = f"Reward {logs['reward']:.3f}"
-            elif 'rewards/mean' in logs:
-                reward_str = f"Reward {logs['rewards/mean']:.3f}"
+            # Track reward and loss history
+            reward = logs.get('reward') or logs.get('rewards/mean')
+            loss = logs.get('loss')
+            if reward is not None:
+                self.reward_history.append(reward)
+            if loss is not None:
+                self.loss_history.append(loss)
+
+            # Compute rolling averages
+            recent_rewards = self.reward_history[-self.rolling_window:]
+            avg_reward = sum(recent_rewards) / len(recent_rewards) if recent_rewards else 0
+
+            loss_str = f"Loss {loss:.4f}" if loss is not None else ""
+            reward_str = f"Reward {reward:.3f} (avg{len(recent_rewards)}: {avg_reward:.3f})" if reward is not None else ""
 
             parts = [
                 f"[{progress * 100:>5.1f}%]",
@@ -223,6 +234,18 @@ class CustomRLCallback(TrainerCallback):
         total = time.time() - self.start_time
         print("\n" + "=" * 70)
         print(f"RLVR Training Complete! Time: {int(total // 60)}m {int(total % 60)}s")
+
+        # Print reward trend summary
+        if self.reward_history:
+            n = len(self.reward_history)
+            first_quarter = self.reward_history[:n // 4]
+            last_quarter = self.reward_history[-(n // 4):]
+            first_avg = sum(first_quarter) / len(first_quarter) if first_quarter else 0
+            last_avg = sum(last_quarter) / len(last_quarter) if last_quarter else 0
+            overall_avg = sum(self.reward_history) / n
+            print(f"  Reward: first 25% avg={first_avg:.3f}, last 25% avg={last_avg:.3f}, "
+                  f"overall avg={overall_avg:.3f}, delta={last_avg - first_avg:+.3f}")
+
         print("=" * 70 + "\n")
 
 
